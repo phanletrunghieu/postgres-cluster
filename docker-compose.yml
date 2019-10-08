@@ -1,0 +1,128 @@
+version: '3'
+networks:
+  pgcluster:
+    driver: bridge
+
+volumes:
+  pgmaster:
+  pgslave1:
+  pgslave2:
+
+services:
+  pgmaster:
+    image: postdock/postgres:1.14-postgres10-repmgr40
+    environment:
+      NODE_ID: 1 # Integer number of node (not required if can be extracted from NODE_NAME var, e.g. node-45 => 1045)
+      NODE_NAME: node1 # Node name
+      CLUSTER_NODE_NETWORK_NAME: pgmaster # (default: hostname of the node)
+      
+      PARTNER_NODES: "pgmaster,pgslave1,pgslave2"
+      REPLICATION_PRIMARY_HOST: pgmaster # That should be ignored on the same node
+      
+      NODE_PRIORITY: 100  # (default: 100)
+      #database we want to use for application
+      POSTGRES_PASSWORD: '${POSTGREST_DB_PASSWORD}'
+      POSTGRES_USER: '${POSTGREST_DB_USER}'
+      POSTGRES_DB: '${POSTGREST_DB_NAME}'
+      CLEAN_OVER_REWIND: 0
+      CONFIGS_DELIMITER_SYMBOL: ;
+      CONFIGS: "listen_addresses:'*';max_replication_slots:10"
+                            # in format variable1:value1[,variable2:value2[,...]] if CONFIGS_DELIMITER_SYMBOL=, and CONFIGS_ASSIGNMENT_SYMBOL=:
+                            # used for pgpool.conf file
+      #defaults:
+      CLUSTER_NAME: pg_cluster # default is pg_cluster
+      REPLICATION_DB: '${POSTGREST_REPLICATION_DB}' # default is replication_db
+      REPLICATION_USER: '${POSTGREST_REPLICATION_USER}' # default is replication_user
+      REPLICATION_PASSWORD: '${POSTGREST_REPLICATION_PASSWORD}' # default is replication_pass
+        
+    ports:
+      - 5441:5432
+    volumes:
+      - pgmaster:/var/lib/postgresql/data
+    networks:
+      - pgcluster
+
+  pgslave1:
+    image: postdock/postgres:1.14-postgres10-repmgr40
+    environment:
+      NODE_ID: 2
+      NODE_NAME: node2
+      PARTNER_NODES: "pgmaster,pgslave1,pgslave2"
+      REPLICATION_PRIMARY_HOST: pgmaster
+      CLUSTER_NODE_NETWORK_NAME: pgslave1
+      REPLICATION_UPSTREAM_NODE_ID: 1
+      NODE_PRIORITY: 100  # (default: 100)
+      CLEAN_OVER_REWIND: 1
+      CONFIGS_DELIMITER_SYMBOL: ;
+      CONFIGS: "listen_addresses:'*';max_replication_slots:10" #some overrides
+
+      REPLICATION_DB: '${POSTGREST_REPLICATION_DB}' # default is replication_db
+      REPLICATION_USER: '${POSTGREST_REPLICATION_USER}' # default is replication_user
+      REPLICATION_PASSWORD: '${POSTGREST_REPLICATION_PASSWORD}' # default is replication_pass
+    ports:
+      - 5442:5432
+    volumes:
+      - pgslave1:/var/lib/postgresql/data
+    networks:
+      - pgcluster
+
+  pgslave2:
+    image: postdock/postgres:1.14-postgres10-repmgr40
+    environment:
+      NODE_ID: 3
+      NODE_NAME: node3
+      PARTNER_NODES: "pgmaster,pgslave1,pgslave2"
+      REPLICATION_PRIMARY_HOST: pgmaster
+      CLUSTER_NODE_NETWORK_NAME: pgslave2
+      REPLICATION_UPSTREAM_NODE_ID: 1
+      NODE_PRIORITY: 100  # (default: 100)
+      CLEAN_OVER_REWIND: 1
+      CONFIGS_DELIMITER_SYMBOL: ;
+      CONFIGS: "listen_addresses:'*';max_replication_slots:10" #some overrides
+
+      REPLICATION_DB: '${POSTGREST_REPLICATION_DB}' # default is replication_db
+      REPLICATION_USER: '${POSTGREST_REPLICATION_USER}' # default is replication_user
+      REPLICATION_PASSWORD: '${POSTGREST_REPLICATION_PASSWORD}' # default is replication_pass
+    ports:
+      - 5443:5432
+    volumes:
+      - pgslave2:/var/lib/postgresql/data
+    networks:
+      - pgcluster
+
+  pgpool:
+    image: postdock/pgpool:1.14-pgpool37-postgres10
+    environment:
+      PCP_USER: pcp_userpgmaster
+      PCP_PASSWORD: pcp_pass
+      WAIT_BACKEND_TIMEOUT: 60
+
+      CHECK_USER: '${POSTGREST_DB_USER}'
+      CHECK_PASSWORD: '${POSTGREST_DB_PASSWORD}'
+      CHECK_PGCONNECT_TIMEOUT: 3 #timout for checking if primary node is healthy
+      DB_USERS: '${POSTGREST_DB_USER}:${POSTGREST_DB_PASSWORD}' # in format user:password[,user:password[...]]
+      BACKENDS: "0:pgmaster:5432:1:/var/lib/postgresql/data:ALLOW_TO_FAILOVER,1:pgslave1:5432:1::,2:pgslave2:5432:1::"
+                # in format num:host:port:weight:data_directory:flag[,...]
+                # defaults:
+                #   port: 5432
+                #   weight: 1
+                #   data_directory: /var/lib/postgresql/data
+                #   flag: ALLOW_TO_FAILOVER
+      REQUIRE_MIN_BACKENDS: 2 # minimal number of backends to start pgpool (some might be unreachable)
+      CONFIGS: "num_init_children:250,max_pool:4"
+                # in format variable1:value1[,variable2:value2[,...]] if CONFIGS_DELIMITER_SYMBOL=, and CONFIGS_ASSIGNMENT_SYMBOL=:
+                # used for pgpool.conf file
+    # ports:
+    #   - 5432:5432
+    #   - 9898:9898 # PCP
+    healthcheck:
+      test: ["CMD", "sh", "-c", "/usr/local/bin/pgpool/has_write_node.sh"]
+      interval: 1m30s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - pgmaster
+      - pgslave1
+      - pgslave2
+    networks:
+      - pgcluster

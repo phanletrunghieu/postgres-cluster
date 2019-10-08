@@ -1,0 +1,1 @@
+docker exec -it postgres-cluster_pgpool_1 sh -c 'PGPASSWORD=$CHECK_PASSWORD psql -U $CHECK_USER -h localhost template1 -c "show pool_nodes"'
