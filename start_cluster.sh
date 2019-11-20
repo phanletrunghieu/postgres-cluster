@@ -1,2 +1,1 @@
-docker-compose up -d
-docker-compose scale pgpool=2
+docker-compose up -d --scale pgpool=2 --no-recreate
