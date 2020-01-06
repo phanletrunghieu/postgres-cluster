@@ -1,0 +1,29 @@
+version: '3'
+services:
+  wrapper:
+    image: postgres:11.5-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: '${WRAPPER_POSTGREST_DB_USER}'
+      POSTGRES_PASSWORD: '${WRAPPER_POSTGREST_DB_PASSWORD}'
+      POSTGRES_DB: '${WRAPPER_POSTGREST_DB_NAME}'
+    # volumes:
+    #   - ./pg_data:/var/lib/postgresql/data
+    # ports:
+    #   - 5432:5432
+
+  shard1:
+    image: postgres:11.5-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: '${SHARD1_POSTGREST_DB_USER}'
+      POSTGRES_PASSWORD: '${SHARD1_POSTGREST_DB_PASSWORD}'
+      POSTGRES_DB: '${SHARD1_POSTGREST_DB_NAME}'
+  
+  shard2:
+    image: postgres:11.5-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: '${SHARD2_POSTGREST_DB_USER}'
+      POSTGRES_PASSWORD: '${SHARD2_POSTGREST_DB_PASSWORD}'
+      POSTGRES_DB: '${SHARD2_POSTGREST_DB_NAME}'
